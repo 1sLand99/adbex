@@ -26,10 +26,8 @@ target_include_directories(plthook SYSTEM PUBLIC ${PLTHOOK_PATH})
 
 # adbex
 add_executable(inject inject.c ptrace.c utils.c)
-target_link_libraries(inject)
 
 add_library(adbex_init SHARED adbex_init.c utils.c)
 target_link_libraries(adbex_init plthook)
 
 add_library(adbex_adbd SHARED adbex_adbd.c utils.c)
-target_link_libraries(adbex_adbd)

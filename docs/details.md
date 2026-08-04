@@ -60,3 +60,9 @@ allow { surfaceflinger audioserver mediaswcodec mediacodec hwservicemanager netd
 Hook `execle` to replace shell with whatever we want.
 
 The shell path is read from property `persist.sys.adb.shell`, similar to LineageOS.
+
+### KernelSU ADB Root Compatibility
+
+When KSU ADB Root is enabled, SELinux rules are skipped (KSU handles SELinux elevation at the kernel level). Rules are stored in `sepolicy_rule.txt` and applied manually via `magiskpolicy --live` or `ksud sepolicy apply` in `post-fs-data.sh`.
+
+Since ADBEx's `LD_PRELOAD` entry takes precedence, `libadbex_adbd.so` is loaded instead of `libadbroot.so`. ADBEx replicates KSU's `execle` hook (`.ksurc` injection) and PATH setup (`/data/adb/ksu/bin`) for compatibility.

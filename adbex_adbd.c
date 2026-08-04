@@ -13,6 +13,8 @@
 
 EXPORT int __android_log_is_debuggable() { return 1; }
 
+EXPORT int selinux_android_setcon(const char *con) { return 0; }
+
 // For Android 9+
 typedef void (*callback_t)(void* cookie, const char* name, const char* value, uint32_t serial);
 typedef void (*__system_property_read_callback_t)(const prop_info* pi, callback_t callback, void* cookie);
@@ -106,6 +108,25 @@ EXPORT int execle(UNUSED const char* path, const char* arg0, ...) {
     return -1;
   }
 
+  // KSU compatibility: inject ENV=/data/adb/ksu/.ksurc into envp
+  char** new_envp = NULL;
+  if (access("/data/adb/ksu/.ksurc", F_OK) == 0) {
+    int env_count = 0;
+    while (envp[env_count]) env_count++;
+    new_envp = malloc((env_count + 2) * sizeof(char*));
+    if (new_envp) {
+      int j = 0;
+      for (int i = 0; i < env_count; i++) {
+        if (strncmp(envp[i], "ENV=", 4) != 0) {
+          new_envp[j++] = envp[i];
+        }
+      }
+      new_envp[j++] = "ENV=/data/adb/ksu/.ksurc";
+      new_envp[j] = NULL;
+      envp = new_envp;
+    }
+  }
+
   int ret = -1;
   if (likely(argc == 1 || argc == 2)) {
     ret = orig_execle(sh_path, sh_path, "-", NULL, envp);
@@ -115,12 +136,26 @@ EXPORT int execle(UNUSED const char* path, const char* arg0, ...) {
     errno = EINVAL;
   }
 
+  free(new_envp);
   return ret;
 }
 
 CONSTRUCTOR UNUSED void adbex_adbd_main() {
   klog(LOG_TAG, "injected into adbd");
   unsetenv("LD_PRELOAD");
+
+  // KSU compatibility: append /data/adb/ksu/bin to PATH
+  if (access("/data/adb/ksu/bin", F_OK) == 0) {
+    const char* path = getenv("PATH");
+    if (path && *path) {
+      char new_path[PATH_MAX];
+      strlcpy(new_path, path, sizeof(new_path));
+      strlcat(new_path, ":/data/adb/ksu/bin", sizeof(new_path));
+      setenv("PATH", new_path, 1);
+    } else {
+      setenv("PATH", "/data/adb/ksu/bin", 1);
+    }
+  }
 
   void* libc = dlopen("libc.so", RTLD_NOW);
   if (libc) {
